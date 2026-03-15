@@ -1,14 +1,13 @@
-// Package agents implements the ReAct (Reasoning and Acting) pattern for LLM-powered agents.
+// Package agents provides a ReAct loop for LLM-powered agents.
 //
-// Agents alternate between reasoning about a task and executing tool actions,
-// with each observation feeding back into the next reasoning step.
-// Use New to create an agent, Task to set the goal, then repeatedly call Plan
-// and Act until the agent signals completion.
+// LLMs alone can't take actions or recover from mistakes mid-task. The ReAct
+// pattern (Reasoning + Acting) solves this by interleaving LLM reasoning steps
+// with tool executions, so the model can observe results and adapt before
+// committing to a final answer. This package wires that loop together.
 package agents
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/bit8bytes/beago/inputs/roles"
@@ -16,12 +15,27 @@ import (
 	"github.com/bit8bytes/beago/tools"
 )
 
-var (
-	ErrNoFinalAnswer = errors.New("no final answer available")
-)
+// response is the wire format the LLM produces each iteration.
+// It maps directly to the JSON schema described in the system prompt.
+// FinalAnswer being non-empty signals the agent is done; otherwise Action and
+// ActionInput describe the next tool to call.
+type response struct {
+	Thought     string `json:"thought"`
+	Action      string `json:"action"`
+	ActionInput string `json:"action_input"`
+	FinalAnswer string `json:"final_answer"`
+}
+
+// Action is the domain representation of a tool call, extracted from a
+// response. Name matches the tool's Name() and Input is passed verbatim to
+// Tool.Execute.
+type Action struct {
+	Name  string
+	Input string
+}
 
 type llm interface {
-	Generate(ctx context.Context, messages []llms.Message) (*llms.ContentResponse, error)
+	Generate(ctx context.Context, messages []llms.Message) (string, error)
 }
 
 type store interface {
@@ -30,16 +44,8 @@ type store interface {
 	Clear(ctx context.Context) error
 }
 
-// Tool represents an action the agent can perform.
-// Each tool must provide a name, description, and execution logic.
-type Tool interface {
-	Name() string
-	Description() string
-	Execute(ctx context.Context, input tools.Input) (tools.Output, error)
-}
-
 type parser interface {
-	Parse(text string) (AgentResponse, error)
+	Parse(text string) (response, error)
 	Instructions() string
 }
 
@@ -47,21 +53,21 @@ type parser interface {
 // Call Plan to generate the next action, then Act to execute it.
 // Repeat until Plan returns Finish=true, then retrieve the result with Answer.
 type Agent struct {
-	model       llm
-	tools       map[string]Tool
-	History     store
-	actions     []Action
-	parser      parser
-	finalAnswer string
+	model   llm
+	tools   map[string]tools.Tool
+	history store
+	actions []Action
+	parser  parser
+	answer  string
 }
 
 // New creates an agent with the given model, tools, storage, and parser.
 // For the ReAct pattern, prefer NewReAct.
-func New(model llm, tools []Tool, storage store, p parser) *Agent {
+func New(model llm, tools []tools.Tool, storage store, p parser) *Agent {
 	return &Agent{
 		model:   model,
 		tools:   toolNames(tools),
-		History: storage,
+		history: storage,
 		parser:  p,
 	}
 }
@@ -69,7 +75,7 @@ func New(model llm, tools []Tool, storage store, p parser) *Agent {
 // Task sets the user's question or task for the agent to solve.
 // Call this before starting the Plan-Act loop.
 func (a *Agent) Task(ctx context.Context, prompt string) error {
-	return a.History.Add(ctx, llms.Message{
+	return a.history.Add(ctx, llms.Message{
 		Role:    roles.User,
 		Content: "Question: " + prompt,
 	})
@@ -77,48 +83,42 @@ func (a *Agent) Task(ctx context.Context, prompt string) error {
 
 // Plan calls the LLM to decide the next action or provide a final answer.
 // Returns Response.Finish=true when the task is complete.
-func (a *Agent) Plan(ctx context.Context) (*Response, error) {
-	history, err := a.History.List(ctx)
+func (a *Agent) Plan(ctx context.Context) error {
+	history, err := a.history.List(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	generated, err := a.model.Generate(ctx, history)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	parsed, err := a.parser.Parse(generated.Result)
+	parsed, err := a.parser.Parse(generated)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse agent response: %w", err)
+		return fmt.Errorf("failed to parse agent response: %w", err)
 	}
 
-	if parsed.FinalAnswer == "" && parsed.Action == "" {
-		if err := a.addAssistantMessage(ctx, generated.Result); err != nil {
-			return nil, fmt.Errorf("failed to store assistant message: %w", err)
-		}
-		if err := a.addObservationMessage(ctx, "Your last response was incomplete: it contained neither an action nor a final answer. Please continue: either call a tool or provide your final answer."); err != nil {
-			return nil, err
-		}
-		return &Response{Thought: parsed.Thought}, nil
-	}
-
-	if err := a.addAssistantMessage(ctx, generated.Result); err != nil {
-		return nil, fmt.Errorf("failed to store assistant message: %w", err)
+	if err := a.addAssistantMessage(ctx, generated); err != nil {
+		return fmt.Errorf("failed to store assistant message: %w", err)
 	}
 
 	if parsed.FinalAnswer != "" {
-		a.finalAnswer = parsed.FinalAnswer
-		return &Response{Thought: parsed.Thought, Finish: true}, nil
+		a.answer = parsed.FinalAnswer
+		return nil
 	}
 
 	action := Action{
-		Tool:      parsed.Action,
-		ToolInput: parsed.ActionInput,
+		Name:  parsed.Action,
+		Input: parsed.ActionInput,
 	}
 	a.actions = []Action{action}
 
-	return &Response{Thought: parsed.Thought, Actions: []Action{action}}, nil
+	return nil
+}
+
+func (a *Agent) Answer(ctx context.Context) (string, bool) {
+	return a.answer, a.answer != ""
 }
 
 // Act executes the tool chosen by Plan and adds the result as an observation.
@@ -134,37 +134,26 @@ func (a *Agent) Act(ctx context.Context) error {
 }
 
 func (a *Agent) handleAction(ctx context.Context, action Action) error {
-	t, exists := a.tools[action.Tool]
+	t, exists := a.tools[action.Name]
 	if !exists {
-		return a.addObservationMessage(ctx, "The action "+action.Tool+" doesn't exist.")
+		return a.addObservationMessage(ctx, "The action "+action.Name+" doesn't exist.")
 	}
 
-	observation, err := t.Execute(ctx, tools.Input{
-		Content: action.ToolInput,
-	})
+	observation, err := t.Execute(ctx, action.Input)
 	if err != nil {
 		return a.addObservationMessage(ctx, "Error: "+err.Error())
 	}
 
-	return a.addObservationMessage(ctx, observation.Content)
+	return a.addObservationMessage(ctx, observation)
 }
 
 func (a *Agent) clearActions() {
 	a.actions = nil
 }
 
-// Answer returns the final result after the agent completes the task.
-// Only call this after Plan returns Finish=true.
-func (a *Agent) Answer() (string, error) {
-	if a.finalAnswer == "" {
-		return "", ErrNoFinalAnswer
-	}
-	return a.finalAnswer, nil
-}
-
-func toolNames(tools []Tool) map[string]Tool {
-	t := make(map[string]Tool, len(tools))
-	for _, tool := range tools {
+func toolNames(tls []tools.Tool) map[string]tools.Tool {
+	t := make(map[string]tools.Tool, len(tls))
+	for _, tool := range tls {
 		t[tool.Name()] = tool
 	}
 	return t

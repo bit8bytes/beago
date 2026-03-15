@@ -48,6 +48,6 @@ func main() {
 		Options: ollama.Options{NumCtx: 4096},
 		Stream:  false,
 	})
-	generatedContent, _ := client.Generate(context.Background(), formattedMessages)
-	fmt.Println(generatedContent.Result)
+	out, _ := client.Generate(context.Background(), formattedMessages)
+	fmt.Println(out)
 }

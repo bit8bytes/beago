@@ -22,7 +22,7 @@ func New(model Model) *client {
 	return &client{Model: model}
 }
 
-func (oc *client) Generate(ctx context.Context, messages []llms.Message) (*llms.ContentResponse, error) {
+func (oc *client) Generate(ctx context.Context, messages []llms.Message) (string, error) {
 	client := &http.Client{
 		Timeout: 240 * time.Second,
 	}
@@ -43,18 +43,18 @@ func (oc *client) Generate(ctx context.Context, messages []llms.Message) (*llms.
 
 	requestBody, err := json.Marshal(request)
 	if err != nil {
-		return nil, errors.New("error marshaling request")
+		return "", errors.New("error marshaling request")
 	}
 
 	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(requestBody))
 	if err != nil {
-		return nil, errors.New("create request failed")
+		return "", errors.New("create request failed")
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.New("HTTP request failed")
+		return "", errors.New("HTTP request failed")
 	}
 	defer resp.Body.Close()
 
@@ -66,7 +66,7 @@ func (oc *client) Generate(ctx context.Context, messages []llms.Message) (*llms.
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return nil, errors.New("error decoding response")
+			return "", errors.New("error decoding response")
 		}
 
 		finalResponse.Message.Content += chatResponse.Message.Content
@@ -74,16 +74,16 @@ func (oc *client) Generate(ctx context.Context, messages []llms.Message) (*llms.
 			if strings.Contains(finalResponse.Message.Content, stopSeq) {
 				finalResponse.Message.Content = strings.Split(finalResponse.Message.Content, stopSeq)[0]
 				finalResponse.Done = true
-				return &llms.ContentResponse{Result: finalResponse.Message.Content}, nil
+				return finalResponse.Message.Content, nil
 			}
 		}
 	}
 
 	if chatResponse.Done {
-		return &llms.ContentResponse{Result: finalResponse.Message.Content}, nil
+		return finalResponse.Message.Content, nil
 	}
 
-	return &llms.ContentResponse{Result: finalResponse.Message.Content}, nil
+	return finalResponse.Message.Content, nil
 }
 
 func (oc *client) StreamContent(ctx context.Context, messages []llms.Message, handler llms.StreamHandler) error {
@@ -166,7 +166,7 @@ func (oc *client) StreamContent(ctx context.Context, messages []llms.Message, ha
 	}
 }
 
-func (oc *client) GenerateEmbedding(ctx context.Context, prompt string) (llms.EmbeddingResponse, error) {
+func (oc *client) GenerateEmbedding(ctx context.Context, prompt string) ([]float32, error) {
 	client := &http.Client{
 		Timeout: 240 * time.Second,
 	}
@@ -186,33 +186,35 @@ func (oc *client) GenerateEmbedding(ctx context.Context, prompt string) (llms.Em
 
 	requestBody, err := json.Marshal(request)
 	if err != nil {
-		return llms.EmbeddingResponse{}, errors.New("error marshaling request")
+		return nil, errors.New("error marshaling request")
 	}
 
 	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(requestBody))
 	if err != nil {
-		return llms.EmbeddingResponse{}, errors.New("create request failed")
+		return nil, errors.New("create request failed")
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return llms.EmbeddingResponse{}, errors.New("http request failed")
+		return nil, errors.New("http request failed")
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return llms.EmbeddingResponse{}, errors.New("error reading response body")
+		return nil, errors.New("error reading response body")
 	}
 
 	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	var embeddingResponse llms.EmbeddingResponse
+	var embeddingResponse struct {
+		Embedding []float32 `json:"embedding"`
+	}
 	err = json.NewDecoder(resp.Body).Decode(&embeddingResponse)
 	if err != nil {
-		return llms.EmbeddingResponse{}, errors.New("error decoding response")
+		return nil, errors.New("error decoding response")
 	}
 
-	return llms.EmbeddingResponse{Embedding: embeddingResponse.Embedding}, nil
+	return embeddingResponse.Embedding, nil
 }

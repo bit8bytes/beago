@@ -16,7 +16,7 @@ type parser[T any] interface {
 }
 
 type llm interface {
-	Generate(ctx context.Context, messages []llms.Message) (*llms.ContentResponse, error)
+	Generate(ctx context.Context, messages []llms.Message) (string, error)
 }
 
 // Pipe is a generic pipeline that sends messages to a language model and parses
@@ -45,14 +45,20 @@ func (pipe *Pipe[T]) Invoke(ctx context.Context) (*T, error) {
 	}
 
 	instructions := pipe.parser.Instructions()
-	pipe.messages[0].Content += " " + instructions
+	msgs := pipe.messages
+	if instructions != "" {
+		// Copy first message so instructions aren't appended on repeated Invoke calls.
+		first := pipe.messages[0]
+		first.Content += " " + instructions
+		msgs = append([]llms.Message{first}, pipe.messages[1:]...)
+	}
 
-	output, err := pipe.model.Generate(ctx, pipe.messages)
+	output, err := pipe.model.Generate(ctx, msgs)
 	if err != nil {
 		return nil, err
 	}
 
-	parsed, err := pipe.parser.Parse(output.Result)
+	parsed, err := pipe.parser.Parse(output)
 	if err != nil {
 		return nil, err
 	}

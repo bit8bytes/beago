@@ -1,0 +1,33 @@
+# https://taskfile.dev
+
+version: "3"
+
+tasks:
+  default:
+    desc: Display available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  audit:
+    desc: Format, vet and test all code
+    cmds:
+      - echo 'Formatting code...'
+      - go fmt ./...
+      - echo 'Vetting code...'
+      - go vet ./...
+      - echo 'Running tests...'
+      - go test -short -race -vet=off ./...
+
+  cover:
+    desc: Run test coverage
+    cmds:
+      - echo 'Test coverage...'
+      - go test -short -tags {{.DB_DRIVER}} -covermode=count -coverprofile=/tmp/profile.out ./...
+
+  analyze:
+    desc: Analyze the test coverage in your browser
+    deps: [cover]
+    cmds:
+      - echo 'Analyze test coverage...'
+      - go tool cover -html=/tmp/profile.out

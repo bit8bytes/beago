@@ -1,13 +1,13 @@
+// Package tools defines the Tool interface and ships built-in tool
+// implementations that agents can use to interact with the outside world.
 package tools
 
-// Input holds the data passed to a tool. It is intentionally kept as a struct
-// rather than a plain string to remain extensible for future fields (e.g. metadata, context).
-type Input struct {
-	Content string
-}
+import "context"
 
-// Output holds the data returned by a tool. Like Input, it is a struct to allow
-// additional fields to be added in the future without breaking existing tool implementations.
-type Output struct {
-	Content string
+// Tool represents an action the agent can perform.
+// Each tool must provide a name, description, and execution logic.
+type Tool interface {
+	Name() string
+	Description() string
+	Execute(ctx context.Context, input string) (string, error)
 }

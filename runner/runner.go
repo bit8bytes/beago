@@ -1,69 +1,66 @@
-// Package runner provides execution orchestration for agentic Plan-Act loops.
-// It manages the iterative cycle of planning and acting until task completion
-// or iteration limits are reached.
+// Package runner separates the loop control logic from agent logic so that
+// different agent implementations can be driven by the same execution strategy
+// without duplicating iteration, cancellation, or error-handling concerns.
 package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
-
-	"github.com/bit8bytes/beago/agents"
 )
 
-const (
-	reset = "\033[0m"
-	blue  = "\033[34m"
-	green = "\033[32m"
-	cyan  = "\033[36m"
-	white = "\033[37m"
+var (
+	// ErrNoFinalAnswer is returned by Run when the context is cancelled before
+	// the agent produces a final answer. Callers can use errors.Is to
+	// distinguish this from real planning or action failures, similar to how
+	// http.ErrServerClosed signals a clean shutdown versus an unexpected error.
+	ErrNoFinalAnswer = errors.New("no final answer")
 )
 
-// runner executes an agent's Plan-Act loop.
-type runner struct {
-	agent             *agents.Agent
-	printMessages     bool
-	lastPrintedMsgIdx int
+// Agent is the contract the runner relies on to stay decoupled from any specific
+// LLM backend or tool set. Keeping Plan, Act, and Answer as separate steps lets
+// the runner interleave cancellation checks between them and makes each stage
+// independently testable.
+type Agent interface {
+	Act(ctx context.Context) error
+	Plan(ctx context.Context) error
+	Task(ctx context.Context, prompt string) error
+	Answer(ctx context.Context) (string, bool)
 }
 
-// New creates a Runner with the given agent, iteration limit, and message printing option.
-func New(agent *agents.Agent, printMessages bool) *runner {
-	return &runner{
-		agent:             agent,
-		printMessages:     printMessages,
-		lastPrintedMsgIdx: 0,
-	}
+// Runner owns the loop so that agents don't need to implement their own
+// iteration or cancellation logic.
+type Runner struct {
+	agent Agent
 }
 
-// Run executes the agent's Plan-Act loop until completion or iteration limit.
-func (r *runner) Run(ctx context.Context) error {
+// New wires an agent to a runner without immediately starting work, allowing
+// callers to configure context (deadlines, cancellation) before committing to a run.
+func New(agent Agent) *Runner {
+	return &Runner{agent: agent}
+}
+
+// Run drives the Plan→Answer?→Act cycle, checking context cancellation on every
+// iteration so long-running tool calls don't silently outlive a deadline.
+func (r *Runner) Run(ctx context.Context) (string, error) {
 RUN:
 	for {
 		select {
 		case <-ctx.Done():
 			break RUN
 		default:
-			response, err := r.agent.Plan(ctx)
-			if err != nil {
-				return fmt.Errorf("planning failed: %w", err)
+			if err := r.agent.Plan(ctx); err != nil {
+				return "", fmt.Errorf("planning failed: %w", err)
 			}
 
-			if r.printMessages {
-				if response.Thought != "" {
-					fmt.Printf("%sTHOUGHT:%s %s\n", cyan, reset, response.Thought)
-				}
-				for _, a := range response.Actions {
-					fmt.Printf("%sACTION:%s  %s(%s)\n", blue, reset, a.Tool, a.ToolInput)
-				}
-			}
-
-			if response.Finish {
-				return nil
+			if answer, ok := r.agent.Answer(ctx); ok {
+				return answer, nil
 			}
 
 			if err := r.agent.Act(ctx); err != nil {
-				return fmt.Errorf("action failed: %w", err)
+				return "", fmt.Errorf("action failed: %w", err)
 			}
 		}
 	}
-	return fmt.Errorf("no final answer available")
+	return "", fmt.Errorf("run cancelled: %w", ErrNoFinalAnswer)
 }

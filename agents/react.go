@@ -9,13 +9,14 @@ import (
 	"github.com/bit8bytes/beago/inputs/roles"
 	"github.com/bit8bytes/beago/llms"
 	"github.com/bit8bytes/beago/outputs/json"
+	"github.com/bit8bytes/beago/tools"
 )
 
 // NewReAct creates an agent pre-configured for the ReAct pattern.
 // It seeds the ReAct system prompt into storage.
-func NewReAct(ctx context.Context, model llm, tools []Tool, storage store) (*Agent, error) {
-	p := json.NewParser[AgentResponse]()
-	t := toolNames(tools)
+func NewReAct(ctx context.Context, model llm, tls []tools.Tool, storage store) (*Agent, error) {
+	p := json.NewParser[response]()
+	t := toolNames(tls)
 
 	msgs := buildReActPrompt(t, p.Instructions())
 	if err := storage.Add(ctx, msgs...); err != nil {
@@ -25,14 +26,14 @@ func NewReAct(ctx context.Context, model llm, tools []Tool, storage store) (*Age
 	return &Agent{
 		model:   model,
 		tools:   t,
-		History: storage,
+		history: storage,
 		parser:  p,
 	}, nil
 }
 
-func buildReActPrompt(tools map[string]Tool, jsonInstructions string) []llms.Message {
+func buildReActPrompt(tls map[string]tools.Tool, jsonInstructions string) []llms.Message {
 	var toolDescriptions strings.Builder
-	for _, t := range tools {
+	for _, t := range tls {
 		fmt.Fprintf(&toolDescriptions, "- %s: %s\n", t.Name(), t.Description())
 	}
 

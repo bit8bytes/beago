@@ -22,7 +22,7 @@ func main() {
 	}
 
 	ollamaClient := ollama.New(llama3_8b_model)
-	generatedContent, _ := ollamaClient.GenerateEmbedding(context.Background(), companyNameFormattedPrompt)
-	fmt.Println(len(generatedContent.Embedding))
-	fmt.Println(generatedContent.Embedding[:3]) // First 3 bytes...
+	embedding, _ := ollamaClient.GenerateEmbedding(context.Background(), companyNameFormattedPrompt)
+	fmt.Println(len(embedding))
+	fmt.Println(embedding[:3]) // First 3 bytes...
 }
