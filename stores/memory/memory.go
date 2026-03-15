@@ -12,8 +12,9 @@ import (
 )
 
 type store struct {
-	mu       sync.Mutex
-	messages []llms.Message
+	mu        sync.Mutex
+	messages  []llms.Message
+	lastHash  string
 }
 
 func New() stores.Store {
@@ -24,7 +25,11 @@ func (s *store) Add(_ context.Context, msgs ...llms.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.messages = append(s.messages, msgs...)
+	for i := range msgs {
+		stores.Stamp(&msgs[i], s.lastHash)
+		s.lastHash = msgs[i].Hash
+		s.messages = append(s.messages, msgs[i])
+	}
 	return nil
 }
 
@@ -34,6 +39,7 @@ func (s *store) Clear(_ context.Context) error {
 
 	// Retain the underlying array to avoid an allocation on the next Add.
 	s.messages = s.messages[:0]
+	s.lastHash = ""
 	return nil
 }
 
