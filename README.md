@@ -24,7 +24,7 @@ agent.Task(ctx, "Use the helloWorld tool with name Beago")
 res, _ := runner.New(agent).Run(ctx)
 ```
 
-See [Examples](/docs/EXAMPLES.md) for full working examples.
+See [Example](/examples/agents/hello/main.go) for full working examples.
 
 ## Contributions
 
