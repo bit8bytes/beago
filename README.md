@@ -17,14 +17,17 @@ beago provides composable building blocks for LLM-powered Go applications — pi
 // Pipe: send messages and get structured output
 pipe := pipes.New(messages, model, parser)
 result, _ := pipe.Invoke(ctx)
+```
+See [Pipe](/examples/pipes/json/main.go) for full working `pipe` example.
 
+```go
 // Agent: reason and act with tools
 agent, _ := agents.NewReAct(ctx, model, tools, storage)
 agent.Task(ctx, "Use the helloWorld tool with name Beago")
 res, _ := runner.New(agent).Run(ctx)
 ```
 
-See [Example](/examples/agents/hello/main.go) for full working examples.
+See [Agent](/examples/agents/hello/main.go) for full working `agent` example.
 
 ## Contributions
 
