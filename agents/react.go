@@ -35,6 +35,13 @@ func buildReActPrompt(tls map[string]tools.Tool, jsonInstructions string) []llms
 	var toolDescriptions strings.Builder
 	for _, t := range tls {
 		fmt.Fprintf(&toolDescriptions, "- %s: %s\n", t.Name(), t.Description())
+		for _, p := range t.Parameters() {
+			req := "optional"
+			if p.Required {
+				req = "required"
+			}
+			fmt.Fprintf(&toolDescriptions, "    - %s (%s): %s\n", p.Name, req, p.Description)
+		}
 	}
 
 	wd, _ := os.Getwd()
@@ -55,10 +62,10 @@ Available tools:
 Respond with a JSON object on each turn with these fields:
 - "thought": your reasoning about what to do next
 - "action": the exact tool name to call (empty string when giving final answer)
-- "action_input": the input to pass to the tool (empty string when giving final answer)
+- "action_input": a JSON object whose keys are the tool's parameter names (empty object {} when giving final answer)
 - "final_answer": your final answer to the user — MUST be non-empty when you are done; empty string ONLY when calling a tool
 
-When you have enough information to answer, set "action" and "action_input" to "" and put a detailed answer based on your observations — MUST be non-empty when done; be thorough and include all relevant findings.
+When you have enough information to answer, set "action" to "" and "action_input" to {} and put a detailed answer based on your observations — MUST be non-empty when done; be thorough and include all relevant findings.
 
 Think step by step. Do not hallucinate.`, wd, toolDescriptions.String(), jsonInstructions),
 		},

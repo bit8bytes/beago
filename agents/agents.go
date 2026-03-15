@@ -8,6 +8,7 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/bit8bytes/beago/inputs/roles"
@@ -20,18 +21,17 @@ import (
 // FinalAnswer being non-empty signals the agent is done; otherwise Action and
 // ActionInput describe the next tool to call.
 type response struct {
-	Thought     string `json:"thought"`
-	Action      string `json:"action"`
-	ActionInput string `json:"action_input"`
-	FinalAnswer string `json:"final_answer"`
+	Thought     string          `json:"thought"`
+	Action      string          `json:"action"`
+	ActionInput json.RawMessage `json:"action_input"`
+	FinalAnswer string          `json:"final_answer"`
 }
 
 // Action is the domain representation of a tool call, extracted from a
-// response. Name matches the tool's Name() and Input is passed verbatim to
-// Tool.Execute.
+// response. Name matches the tool's Name() and Input is passed to Tool.Execute.
 type Action struct {
 	Name  string
-	Input string
+	Input json.RawMessage
 }
 
 type llm interface {

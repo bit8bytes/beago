@@ -27,10 +27,7 @@ func main() {
 		Format:  ollama.JSON,
 	})
 
-	// These tools are specifically designed for Golang.
-	tools := []tools.Tool{
-		&tools.HelloWorldTool{},
-	}
+	tools := []tools.Tool{&tools.HelloWorldTool{}}
 
 	agent, err := agents.NewReAct(ctx, model, tools, storage)
 	if err != nil {
