@@ -18,7 +18,11 @@ func (t *HelloWorldTool) Description() string {
 
 func (t *HelloWorldTool) Parameters() []Parameter {
 	return []Parameter{
-		{Name: "name", Description: "The name to greet", Required: true},
+		{
+			Name:        "name",
+			Description: "The name to greet",
+			Required:    true,
+		},
 	}
 }
 
