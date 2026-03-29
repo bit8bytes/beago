@@ -3,7 +3,6 @@ package agents
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/bit8bytes/beago/inputs/roles"
@@ -44,16 +43,12 @@ func buildReActPrompt(tls map[string]tools.Tool, jsonInstructions string) []llms
 		}
 	}
 
-	wd, _ := os.Getwd()
-
 	return []llms.Message{
 		{
 			Role: roles.System,
 			Content: fmt.Sprintf(`
 You are an helpful agent. Answer questions using the available tools.
 Do not estimate or predict values. Use only values returned by tools.
-
-Working directory: %s
 
 Available tools:
 %s
@@ -67,7 +62,7 @@ Respond with a JSON object on each turn with these fields:
 
 When you have enough information to answer, set "action" to "" and "action_input" to {} and put a detailed answer based on your observations — MUST be non-empty when done; be thorough and include all relevant findings.
 
-Think step by step. Do not hallucinate.`, wd, toolDescriptions.String(), jsonInstructions),
+Think step by step. Do not hallucinate.`, toolDescriptions.String(), jsonInstructions),
 		},
 	}
 }
