@@ -1,68 +1,80 @@
-package agents
+package react
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"strings"
+	"io"
 
-	"github.com/bit8bytes/beago/inputs/roles"
-	"github.com/bit8bytes/beago/llms"
-	"github.com/bit8bytes/beago/outputs/json"
+	"github.com/bit8bytes/beago/pipe"
 	"github.com/bit8bytes/beago/tools"
 )
 
-// NewReAct creates an agent pre-configured for the ReAct pattern.
-// It seeds the ReAct system prompt into storage.
-func NewReAct(ctx context.Context, model llm, tls []tools.Tool, storage store) (*Agent, error) {
-	p := json.NewParser[response]()
-	t := toolNames(tls)
-
-	msgs := buildReActPrompt(t, p.Instructions())
-	if err := storage.Add(ctx, msgs...); err != nil {
-		return nil, err
-	}
-
-	return &Agent{
-		model:   model,
-		tools:   t,
-		history: storage,
-		parser:  p,
-	}, nil
+type response struct {
+	Thought     string          `json:"thought"`
+	Action      string          `json:"action"`
+	ActionInput json.RawMessage `json:"action_input"`
+	FinalAnswer string          `json:"final_answer"`
 }
 
-func buildReActPrompt(tls map[string]tools.Tool, jsonInstructions string) []llms.Message {
-	var toolDescriptions strings.Builder
-	for _, t := range tls {
-		fmt.Fprintf(&toolDescriptions, "- %s: %s\n", t.Name(), t.Description())
-		for _, p := range t.Parameters() {
-			req := "optional"
-			if p.Required {
-				req = "required"
+// Instructions injects the ReAct system prompt and tool descriptions into the stream.
+func Instructions(ts ...tools.Tool) pipe.Handler {
+	return pipe.HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
+		fmt.Fprintln(w, "You are a ReAct agent. Solve tasks step by step using the available tools.")
+		fmt.Fprintln(w, "Do not estimate or predict values. Use only values returned by tools.")
+		fmt.Fprintln(w, "\nAvailable tools:")
+		for _, t := range ts {
+			fmt.Fprintf(w, "\n- %s: %s\n", t.Name, t.Description)
+			for _, p := range t.Params {
+				req := "optional"
+				if p.Required {
+					req = "required"
+				}
+				fmt.Fprintf(w, "    - %s (%s): %s\n", p.Name, req, p.Description)
 			}
-			fmt.Fprintf(&toolDescriptions, "    - %s (%s): %s\n", p.Name, req, p.Description)
 		}
-	}
+		fmt.Fprintln(w, `
+STRICT OUTPUT RULES — you MUST follow these on every single turn:
+- Output ONLY a raw JSON object. No markdown, no code fences, no prose before or after.
+- Every response must be valid JSON with exactly these fields:
+  {"thought": "...", "action": "...", "action_input": {...}, "final_answer": "..."}
+- To call a tool: set "action" to the tool name, "action_input" to its params, "final_answer" to "".
+- To give the final answer: set "action" to "", "action_input" to {}, "final_answer" to your answer.
+- Never output plain text. Never wrap JSON in backticks or markdown code blocks.
+- Always read the file first, then write to it.
+- NEVER use write_file to fix errors. write_file is ONLY for creating new files.
+- NEVER guess or read the file to find errors. ALWAYS run go build first to get the exact line number.
+- To fix a compiler error: (1) run go build → get line N, (2) run cat to read the file and see what line N contains, (3) determine the correct content for that line, (4) run: sed -i '' 'Ns/.*/REPLACEMENT/' file.go
+  Example: go build says main.go:6 error, cat shows line 6 is '"strconv' with missing closing quote → sed -i '' '6s/.*/"strconv"/' main.go
+  Use .* to replace the whole line — never try to match the broken content.
 
-	return []llms.Message{
-		{
-			Role: roles.System,
-			Content: fmt.Sprintf(`
-You are an helpful agent. Answer questions using the available tools.
-Do not estimate or predict values. Use only values returned by tools.
+Think step by step. Do not hallucinate.`)
+		_, err := io.Copy(w, r)
+		return err
+	})
+}
 
-Available tools:
-%s
-%s
+// Done returns a Handler that signals loop termination when the stream contains a non-empty final_answer.
+func Done() pipe.Handler {
+	return pipe.Exit(func(b []byte) bool {
+		var resp response
+		json.Unmarshal(b, &resp)
+		return resp.FinalAnswer != ""
+	})
+}
 
-Respond with a JSON object on each turn with these fields:
-- "thought": your reasoning about what to do next
-- "action": the exact tool name to call (empty string when giving final answer)
-- "action_input": a JSON object whose keys are the tool's parameter names (empty object {} when giving final answer)
-- "final_answer": your final answer to the user — MUST be non-empty when you are done; empty string ONLY when calling a tool
-
-When you have enough information to answer, set "action" to "" and "action_input" to {} and put a detailed answer based on your observations — MUST be non-empty when done; be thorough and include all relevant findings.
-
-Think step by step. Do not hallucinate.`, toolDescriptions.String(), jsonInstructions),
-		},
-	}
+// ParseAction validates that the stream contains a well-formed ReAct response and passes it through.
+func ParseAction() pipe.Handler {
+	return pipe.HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
+		var resp response
+		if err := json.NewDecoder(r).Decode(&resp); err != nil {
+			fmt.Fprintf(w, "\nObservation: invalid ReAct response: %v\n", err)
+			return nil
+		}
+		if resp.Action == "" && resp.FinalAnswer == "" {
+			fmt.Fprintf(w, "\nObservation: response must set either action or final_answer\n")
+			return nil
+		}
+		return json.NewEncoder(w).Encode(resp)
+	})
 }
