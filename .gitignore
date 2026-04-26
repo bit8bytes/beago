@@ -27,3 +27,6 @@ go.work.sum
 
 /tmp
 /bin
+
+# nix
+.direnv/
