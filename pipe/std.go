@@ -7,12 +7,10 @@ import (
 
 func Tee(debug io.Writer) HandlerFunc {
 	return HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
-		// MultiWriter creates a single writer for multiple writers.
-		// Here, it is a Y-splitter that writes to w and debug.
-		mw := io.MultiWriter(w, debug)
-
-		// Here, we pipe everything into our Y-splitter.
-		_, err := io.Copy(mw, r)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		_, err := io.Copy(io.MultiWriter(w, debug), r)
 		return err
 	})
 }
@@ -22,6 +20,9 @@ func Tee(debug io.Writer) HandlerFunc {
 // signalling the enclosing Loop to stop.
 func Exit(f func([]byte) bool) Handler {
 	return HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		data, err := io.ReadAll(r)
 		if err != nil {
 			return err

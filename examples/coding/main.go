@@ -16,20 +16,25 @@ import (
 	"github.com/bit8bytes/beago/tools"
 )
 
-// Usage: echo "Write a README for the pipe package based on its source files" | go run .
+// Usage: echo "Write a function that adds two integers" | go run .
+// Run from the root of the Go module you want the agent to work on.
 func main() {
 	model := ollama.New("gemma4:e4b", "")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	shell := tools.Exec("man", "ls", "grep", "cat", "find", "sed", "go")
-	write := tools.WriteFile()
+	readFile := tools.ReadFile()
+	editFile := tools.EditFile()
+	writeFile := tools.WriteFile()
+	goBuild := tools.GoBuild()
+	goTest := tools.GoTest()
+	shell := tools.Exec("ls", "find", "grep")
 
 	hist := history.New()
 
 	err := pipe.Execute(ctx, os.Stdin, os.Stdout,
-		react.Instructions(shell, write),
+		react.CodingInstructions(readFile, editFile, writeFile, goBuild, goTest, shell),
 		hist.System(),
 		pipe.Loop(
 			hist.Replay(),
@@ -38,7 +43,7 @@ func main() {
 			hist.Assistant(),
 			jsonpkg.Pretty(os.Stderr),
 			react.ParseAction(),
-			tools.Execute(shell, write),
+			tools.Execute(readFile, editFile, writeFile, goBuild, goTest, shell),
 			hist.User(),
 			react.Done(),
 		),

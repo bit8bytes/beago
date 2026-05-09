@@ -95,16 +95,26 @@ func TestExecute_NoHandlers(t *testing.T) {
 	}
 }
 
-func TestLoop_RunsUpToMaxIter(t *testing.T) {
+func TestLoop_CancelsOnContextDone(t *testing.T) {
 	n := 0
-	h := pipe.Loop(3, counter(&n))
+	ctx, cancel := context.WithCancel(context.Background())
+
+	h := pipe.Loop(pipe.HandlerFunc(func(c context.Context, r io.Reader, w io.Writer) error {
+		n++
+		if n >= 3 {
+			cancel()
+		}
+		_, err := io.Copy(w, r)
+		return err
+	}))
 
 	var out bytes.Buffer
-	if err := h.Handle(context.Background(), strings.NewReader("x"), &out); err != nil {
-		t.Fatal(err)
+	err := h.Handle(ctx, strings.NewReader("x"), &out)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got %v", err)
 	}
 	if n != 3 {
-		t.Errorf("expected 3 iterations, got %d", n)
+		t.Errorf("expected 3 iterations before cancel, got %d", n)
 	}
 }
 
@@ -112,7 +122,7 @@ func TestLoop_StopsOnErrDone(t *testing.T) {
 	n := 0
 	stopAfter := 2
 
-	h := pipe.Loop(10, counter(&n), pipe.Exit(func(data []byte) bool {
+	h := pipe.Loop(counter(&n), pipe.Exit(func(data []byte) bool {
 		return n >= stopAfter
 	}))
 
@@ -127,7 +137,7 @@ func TestLoop_StopsOnErrDone(t *testing.T) {
 
 func TestLoop_OutputIsLastIterationResult(t *testing.T) {
 	n := 0
-	h := pipe.Loop(3, appendSuffix("."), pipe.Exit(func(data []byte) bool {
+	h := pipe.Loop(appendSuffix("."), pipe.Exit(func(data []byte) bool {
 		n++
 		return n >= 3
 	}))
@@ -148,7 +158,7 @@ func TestLoop_PropagatesHandlerError(t *testing.T) {
 		return boom
 	})
 
-	h := pipe.Loop(5, fail)
+	h := pipe.Loop(fail)
 	var out bytes.Buffer
 	err := h.Handle(context.Background(), strings.NewReader("x"), &out)
 	if !errors.Is(err, boom) {

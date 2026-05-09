@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 
@@ -22,4 +23,5 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Fprintln(os.Stdout)
 }

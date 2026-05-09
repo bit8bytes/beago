@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
+	"github.com/bit8bytes/beago/llm"
 	"github.com/bit8bytes/beago/pipe"
 	"github.com/bit8bytes/beago/tools"
 )
@@ -17,23 +19,28 @@ type response struct {
 	FinalAnswer string          `json:"final_answer"`
 }
 
-// Instructions injects the ReAct system prompt and tool descriptions into the stream.
+// Instructions injects the ReAct system prompt and tool descriptions into the stream
+// as JSON-encoded llm.Message objects (system + user).
 func Instructions(ts ...tools.Tool) pipe.Handler {
 	return pipe.HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
-		fmt.Fprintln(w, "You are a ReAct agent. Solve tasks step by step using the available tools.")
-		fmt.Fprintln(w, "Do not estimate or predict values. Use only values returned by tools.")
-		fmt.Fprintln(w, "\nAvailable tools:")
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		var sb strings.Builder
+		fmt.Fprintln(&sb, "You are a ReAct agent. Solve tasks step by step using the available tools.")
+		fmt.Fprintln(&sb, "Do not estimate or predict values. Use only values returned by tools.")
+		fmt.Fprintln(&sb, "\nAvailable tools:")
 		for _, t := range ts {
-			fmt.Fprintf(w, "\n- %s: %s\n", t.Name, t.Description)
+			fmt.Fprintf(&sb, "\n- %s: %s\n", t.Name, t.Description)
 			for _, p := range t.Params {
 				req := "optional"
 				if p.Required {
 					req = "required"
 				}
-				fmt.Fprintf(w, "    - %s (%s): %s\n", p.Name, req, p.Description)
+				fmt.Fprintf(&sb, "    - %s (%s): %s\n", p.Name, req, p.Description)
 			}
 		}
-		fmt.Fprintln(w, `
+		fmt.Fprintln(&sb, `
 STRICT OUTPUT RULES — you MUST follow these on every single turn:
 - Output ONLY a raw JSON object. No markdown, no code fences, no prose before or after.
 - Every response must be valid JSON with exactly these fields:
@@ -49,8 +56,16 @@ STRICT OUTPUT RULES — you MUST follow these on every single turn:
   Use .* to replace the whole line — never try to match the broken content.
 
 Think step by step. Do not hallucinate.`)
-		_, err := io.Copy(w, r)
-		return err
+
+		input, err := io.ReadAll(r)
+		if err != nil {
+			return err
+		}
+		enc := json.NewEncoder(w)
+		if err := enc.Encode(llm.Message{Role: "system", Content: sb.String()}); err != nil {
+			return err
+		}
+		return enc.Encode(llm.Message{Role: "user", Content: strings.TrimSpace(string(input))})
 	})
 }
 
@@ -66,6 +81,9 @@ func Done() pipe.Handler {
 // ParseAction validates that the stream contains a well-formed ReAct response and passes it through.
 func ParseAction() pipe.Handler {
 	return pipe.HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		var resp response
 		if err := json.NewDecoder(r).Decode(&resp); err != nil {
 			fmt.Fprintf(w, "\nObservation: invalid ReAct response: %v\n", err)

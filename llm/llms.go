@@ -31,6 +31,9 @@ func Generate(l llm) pipe.Handler {
 // then forwards the remaining input as a user message.
 func Prompt(instruction string) pipe.Handler {
 	return pipe.HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		input, err := io.ReadAll(r)
 		if err != nil {
 			return err

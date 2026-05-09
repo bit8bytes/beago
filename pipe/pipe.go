@@ -8,11 +8,14 @@ import (
 )
 
 // Loop runs handlers repeatedly, feeding each iteration's output as the next
-// iteration's input. It stops when a handler returns ErrDone or maxIter is
-// reached. Only the final output is written to w.
-func Loop(maxIter int, handlers ...Handler) Handler {
+// iteration's input. It stops when a handler returns ErrDone, the context is
+// canceled, or the context deadline is exceeded. Only the final output is written to w.
+func Loop(handlers ...Handler) Handler {
 	return HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
-		for range maxIter {
+		for {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			var buf bytes.Buffer
 			err := Execute(ctx, r, &buf, handlers...)
 			if errors.Is(err, ErrDone) {
@@ -24,7 +27,6 @@ func Loop(maxIter int, handlers ...Handler) Handler {
 			}
 			r = &buf
 		}
-		return nil
 	})
 }
 

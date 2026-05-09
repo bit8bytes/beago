@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -20,7 +21,7 @@ func main() {
 	defer cancel()
 
 	err := pipe.Execute(ctx, os.Stdin, os.Stdout,
-		pipe.Loop(10,
+		pipe.Loop(
 			llm.Generate(model),
 			pipe.Exit(func(b []byte) bool {
 				return bytes.Contains(b, []byte("DONE"))
@@ -30,4 +31,5 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Fprintln(os.Stdout)
 }

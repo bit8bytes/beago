@@ -2,7 +2,9 @@
 package json
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -12,6 +14,9 @@ import (
 // Extract strips prose from the stream and emits the first JSON blob.
 func Extract() pipe.Handler {
 	return pipe.HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		data, err := io.ReadAll(r)
 		if err != nil {
 			return err
@@ -22,6 +27,25 @@ func Extract() pipe.Handler {
 			return nil
 		}
 		_, err = w.Write(blob)
+		return err
+	})
+}
+
+// Pretty pretty-prints the JSON in the stream to w and passes the original bytes through.
+func Pretty(w io.Writer) pipe.Handler {
+	return pipe.HandlerFunc(func(ctx context.Context, r io.Reader, w2 io.Writer) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		data, err := io.ReadAll(r)
+		if err != nil {
+			return err
+		}
+		var buf bytes.Buffer
+		if json.Indent(&buf, data, "", "  ") == nil {
+			fmt.Fprintln(w, buf.String())
+		}
+		_, err = w2.Write(data)
 		return err
 	})
 }
