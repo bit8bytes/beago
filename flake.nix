@@ -20,7 +20,6 @@
         packages = with pkgs; [
           git
           go
-          go-task
         ];
       };
     });
