@@ -50,7 +50,7 @@ func (oc *Client) Generate(ctx context.Context, r io.Reader, w io.Writer) error 
 		messages = []llm.Message{{Role: "user", Content: strings.TrimSpace(string(raw))}}
 	}
 
-	request := ChatRequest{
+	request := chatRequest{
 		Model:    oc.Model,
 		Messages: messages,
 		Stream:   true,
@@ -79,7 +79,7 @@ func (oc *Client) Generate(ctx context.Context, r io.Reader, w io.Writer) error 
 
 	decoder := json.NewDecoder(resp.Body)
 	for {
-		var chatResp ChatResponse
+		var chatResp chatResponse
 		if err := decoder.Decode(&chatResp); err != nil {
 			if err == io.EOF {
 				break
