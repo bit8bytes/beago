@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -23,13 +24,26 @@ func main() {
 	err := pipe.Execute(ctx, os.Stdin, os.Stdout,
 		pipe.Loop(
 			llm.Generate(model),
-			pipe.Exit(func(b []byte) bool {
-				return bytes.Contains(b, []byte("DONE"))
-			}),
+			pipe.HandlerFunc(exitOnDone),
 		),
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Fprintln(os.Stdout)
+}
+
+func exitOnDone(ctx context.Context, r io.Reader, w io.Writer) error {
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return fmt.Errorf("exitOnDone: %v", err)
+	}
+	_, err = w.Write(b)
+	if err != nil {
+		return fmt.Errorf("exitOnDone: %v", err)
+	}
+	if bytes.Contains(b, []byte("DONE")) {
+		return pipe.ErrDone
+	}
+	return nil
 }

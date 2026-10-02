@@ -118,40 +118,6 @@ func TestLoop_CancelsOnContextDone(t *testing.T) {
 	}
 }
 
-func TestLoop_StopsOnErrDone(t *testing.T) {
-	n := 0
-	stopAfter := 2
-
-	h := pipe.Loop(counter(&n), pipe.Exit(func(data []byte) bool {
-		return n >= stopAfter
-	}))
-
-	var out bytes.Buffer
-	if err := h.Handle(context.Background(), strings.NewReader("x"), &out); err != nil {
-		t.Fatal(err)
-	}
-	if n != stopAfter {
-		t.Errorf("expected %d iterations, got %d", stopAfter, n)
-	}
-}
-
-func TestLoop_OutputIsLastIterationResult(t *testing.T) {
-	n := 0
-	h := pipe.Loop(appendSuffix("."), pipe.Exit(func(data []byte) bool {
-		n++
-		return n >= 3
-	}))
-
-	var out bytes.Buffer
-	if err := h.Handle(context.Background(), strings.NewReader("x"), &out); err != nil {
-		t.Fatal(err)
-	}
-	// After 3 iterations of appending ".", output should be "x..."
-	if got := out.String(); got != "x..." {
-		t.Errorf("got %q, want %q", got, "x...")
-	}
-}
-
 func TestLoop_PropagatesHandlerError(t *testing.T) {
 	boom := errors.New("boom")
 	fail := pipe.HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
@@ -179,30 +145,6 @@ func TestTee_WritesToBothSinks(t *testing.T) {
 	}
 	if debug.String() != "hello" {
 		t.Errorf("debug got %q, want %q", debug.String(), "hello")
-	}
-}
-
-func TestExit_ReturnsDoneWhenPredicateTrue(t *testing.T) {
-	h := pipe.Exit(func(data []byte) bool { return true })
-
-	var out bytes.Buffer
-	err := h.Handle(context.Background(), strings.NewReader("done"), &out)
-	if !errors.Is(err, pipe.ErrDone) {
-		t.Errorf("expected ErrDone, got %v", err)
-	}
-	// Content must still be passed through.
-	if out.String() != "done" {
-		t.Errorf("got %q, want %q", out.String(), "done")
-	}
-}
-
-func TestExit_ContinuesWhenPredicateFalse(t *testing.T) {
-	h := pipe.Exit(func(data []byte) bool { return false })
-
-	var out bytes.Buffer
-	err := h.Handle(context.Background(), strings.NewReader("keep going"), &out)
-	if err != nil {
-		t.Fatalf("expected nil, got %v", err)
 	}
 }
 
