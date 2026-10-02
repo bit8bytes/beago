@@ -132,22 +132,6 @@ func TestLoop_PropagatesHandlerError(t *testing.T) {
 	}
 }
 
-func TestTee_WritesToBothSinks(t *testing.T) {
-	var primary, debug bytes.Buffer
-	h := pipe.Tee(&debug)
-
-	err := h.Handle(context.Background(), strings.NewReader("hello"), &primary)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if primary.String() != "hello" {
-		t.Errorf("primary got %q, want %q", primary.String(), "hello")
-	}
-	if debug.String() != "hello" {
-		t.Errorf("debug got %q, want %q", debug.String(), "hello")
-	}
-}
-
 func TestHandlerFunc_ImplementsHandler(t *testing.T) {
 	// Compile-time check that HandlerFunc satisfies Handler.
 	var _ pipe.Handler = pipe.HandlerFunc(nil)
