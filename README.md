@@ -15,7 +15,7 @@ beago brings the Unix philosophy to LLM applications: small, focused handlers co
 ```go
 // echo "What is 2+2?" | go run .
 model := ollama.New("gemma4:e4b", "")
-pipe.Execute(context.Background(), os.Stdin, os.Stdout,
+pipe.Do(context.Background(), os.Stdin, os.Stdout,
     llm.Generate(model),
 )
 ```

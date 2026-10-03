@@ -21,7 +21,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := pipe.Execute(ctx, os.Stdin, os.Stdout,
+	err := pipe.Do(ctx, os.Stdin, os.Stdout,
 		pipe.Loop(
 			llm.Generate(model),
 			pipe.HandlerFunc(exitOnDone),

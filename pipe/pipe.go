@@ -17,7 +17,7 @@ func Loop(handlers ...Handler) Handler {
 				return err
 			}
 			var buf bytes.Buffer
-			err := Execute(ctx, r, &buf, handlers...)
+			err := Do(ctx, r, &buf, handlers...)
 			if errors.Is(err, ErrDone) {
 				_, copyErr := io.Copy(w, &buf)
 				return copyErr
@@ -30,7 +30,7 @@ func Loop(handlers ...Handler) Handler {
 	})
 }
 
-func Execute(ctx context.Context, r io.Reader, w io.Writer, handlers ...Handler) error {
+func Do(ctx context.Context, r io.Reader, w io.Writer, handlers ...Handler) error {
 	for i, h := range handlers {
 		// The last handler will write diretcly to our final destination w.
 		// All other handlers will write to the [io.Pipe]

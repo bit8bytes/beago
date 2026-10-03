@@ -36,7 +36,7 @@ type action struct {
 func main() {
 	model := ollama.New("gemma3:4b", "")
 
-	if err := pipe.Execute(context.Background(), os.Stdin, os.Stdout,
+	if err := pipe.Do(context.Background(), os.Stdin, os.Stdout,
 		pipe.HandlerFunc(setupSystemPromptAndUserQuestion),
 		pipe.Loop(
 			llm.Generate(model),

@@ -44,9 +44,9 @@ func counter(n *int) pipe.HandlerFunc {
 	}
 }
 
-func TestExecute_SingleHandler(t *testing.T) {
+func TestDo_SingleHandler(t *testing.T) {
 	var out bytes.Buffer
-	err := pipe.Execute(context.Background(), strings.NewReader("hello"), &out, uppercase())
+	err := pipe.Do(context.Background(), strings.NewReader("hello"), &out, uppercase())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,9 +55,9 @@ func TestExecute_SingleHandler(t *testing.T) {
 	}
 }
 
-func TestExecute_ChainedHandlers(t *testing.T) {
+func TestDo_ChainedHandlers(t *testing.T) {
 	var out bytes.Buffer
-	err := pipe.Execute(context.Background(), strings.NewReader("hi"),
+	err := pipe.Do(context.Background(), strings.NewReader("hi"),
 		&out,
 		uppercase(),
 		appendSuffix("!"),
@@ -70,23 +70,23 @@ func TestExecute_ChainedHandlers(t *testing.T) {
 	}
 }
 
-func TestExecute_PropagatesHandlerError(t *testing.T) {
+func TestDo_PropagatesHandlerError(t *testing.T) {
 	boom := errors.New("boom")
 	fail := pipe.HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
 		return boom
 	})
 
 	var out bytes.Buffer
-	err := pipe.Execute(context.Background(), strings.NewReader("x"), &out, uppercase(), fail)
+	err := pipe.Do(context.Background(), strings.NewReader("x"), &out, uppercase(), fail)
 	if !errors.Is(err, boom) {
 		t.Errorf("expected boom error, got %v", err)
 	}
 }
 
-func TestExecute_NoHandlers(t *testing.T) {
-	// With no handlers Execute should return nil without writing anything.
+func TestDo_NoHandlers(t *testing.T) {
+	// With no handlers Do should return nil without writing anything.
 	var out bytes.Buffer
-	err := pipe.Execute(context.Background(), strings.NewReader("x"), &out)
+	err := pipe.Do(context.Background(), strings.NewReader("x"), &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestHandlerFunc_ImplementsHandler(t *testing.T) {
 	var _ pipe.Handler = pipe.HandlerFunc(nil)
 }
 
-func TestExecute_ContextCancellation(t *testing.T) {
+func TestDo_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -152,7 +152,7 @@ func TestExecute_ContextCancellation(t *testing.T) {
 	})
 
 	var out bytes.Buffer
-	err := pipe.Execute(ctx, strings.NewReader("x"), &out, slow)
+	err := pipe.Do(ctx, strings.NewReader("x"), &out, slow)
 	if err == nil {
 		t.Error("expected an error due to cancelled context")
 	}

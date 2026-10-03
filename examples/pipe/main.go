@@ -17,7 +17,7 @@ func main() {
 
 	ctx := context.Background()
 
-	err := pipe.Execute(ctx, os.Stdin, os.Stdout,
+	err := pipe.Do(ctx, os.Stdin, os.Stdout,
 		llm.Generate(model),
 	)
 	if err != nil {

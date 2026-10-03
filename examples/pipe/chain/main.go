@@ -26,7 +26,7 @@ func main() {
 
 	ctx := context.Background()
 
-	err := pipe.Execute(ctx, os.Stdin, os.Stdout,
+	err := pipe.Do(ctx, os.Stdin, os.Stdout,
 		pipe.HandlerFunc(prompt("Translate the following text to French. Output only the translation.")),
 		llm.Generate(model),
 		pipe.HandlerFunc(prompt("Summarise the following French text in two sentences.")),
