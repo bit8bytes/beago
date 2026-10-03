@@ -7,7 +7,7 @@ beago brings the Unix philosophy to LLM applications: small, focused handlers co
 ## Core Concepts
 
 - **Pipe** — the core primitive: a `Handler` that reads `io.Reader` → transforms → writes `io.Writer`
-- **Execute** — chains handlers sequentially, connecting each output to the next input via `io.Pipe`
+- **Do** — chains handlers sequentially, connecting each output to the next input via `io.Pipe`
 - **Loop** — runs a handler chain repeatedly, feeding each iteration's output as the next input; stops on `ErrDone` or a max iteration count
 
 ## Quick Start
