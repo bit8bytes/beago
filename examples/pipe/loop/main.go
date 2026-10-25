@@ -21,13 +21,12 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := pipe.Do(ctx, os.Stdin, os.Stdout,
+	if err := pipe.Do(ctx, os.Stdin, os.Stdout,
 		pipe.Loop(
 			llm.Generate(client),
 			pipe.HandlerFunc(exitOnDone),
 		),
-	)
-	if err != nil {
+	); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Fprintln(os.Stdout)

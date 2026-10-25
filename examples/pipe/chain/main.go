@@ -14,7 +14,7 @@ import (
 // Usage: echo "The quick brown fox jumps over the lazy dog." | go run .
 //
 // Two LLM calls are chained like Unix pipes: the first translates to French,
-// the second summarises the French text into one sentence.
+// the second summarises the French text into two sentences, still in French.
 // Each handler reads from the previous handler's output — just like:
 //
 //	echo "..." | translate | summarise
@@ -23,13 +23,12 @@ func main() {
 
 	ctx := context.Background()
 
-	err := pipe.Do(ctx, os.Stdin, os.Stdout,
+	if err := pipe.Do(ctx, os.Stdin, os.Stdout,
 		llm.Prompt("Translate the following text to French. Output only the translation."),
 		llm.Generate(client),
-		llm.Prompt("Summarise the following French text in two sentences."),
+		llm.Prompt("Summarise the following French text in two sentences. Respond in French."),
 		llm.Generate(client),
-	)
-	if err != nil {
+	); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Fprintln(os.Stdout)

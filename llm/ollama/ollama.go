@@ -58,7 +58,7 @@ func WithStream(stream bool) Option {
 func New(opts ...Option) *Client {
 	c := &Client{
 		endpoint: "http://localhost:11434/api/chat",
-		stream:   false, // explicitly set to false to avoid streaming by default
+		stream:   true,
 	}
 	for _, opt := range opts {
 		opt(c)

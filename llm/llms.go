@@ -2,7 +2,6 @@
 package llm
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -26,6 +25,7 @@ type llm interface {
 // is prepended as a system message.
 func Prompt(instructions ...string) pipe.Handler {
 	return pipe.HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
+		// We must read the entire input to wrap it as a user message, since we need the full input text before constructing the message.
 		input, err := io.ReadAll(r)
 		if err != nil {
 			return err
@@ -40,22 +40,13 @@ func Prompt(instructions ...string) pipe.Handler {
 }
 
 // Generate wraps an LLM implementation as a pipe.Handler.
-// It accepts either JSON-encoded []Message or plain text as input.
-// Plain text is treated as a user message.
+// It expects JSON-encoded []Message as input.
 func Generate(l llm) pipe.Handler {
 	return pipe.HandlerFunc(func(ctx context.Context, r io.Reader, w io.Writer) error {
-		input, err := io.ReadAll(r)
-		if err != nil {
+		var messages []Message
+		if err := json.NewDecoder(r).Decode(&messages); err != nil {
 			return err
 		}
-
-		var messages []Message
-		if err := json.NewDecoder(bytes.NewReader(input)).Decode(&messages); err != nil {
-			messages = []Message{
-				{Role: "user", Content: strings.TrimSpace(string(input))},
-			}
-		}
-
 		return l.Generate(ctx, messages, w)
 	})
 }
