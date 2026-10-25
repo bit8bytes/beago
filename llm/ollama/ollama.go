@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/bit8bytes/beago/llm"
 )
@@ -41,52 +40,41 @@ func New(model string, endpoint string) *Client {
 	}
 }
 
-// Handle implements the pipe.Handler interface.
-// It reads a prompt from r, sends it to Ollama, and streams the text response to w.
+// Generate implements the llm.Generator interface.
+// It reads []llm.Message from r, sends them to Ollama, and streams the text response to w.
 func (oc *Client) Generate(ctx context.Context, r io.Reader, w io.Writer) error {
-	raw, err := io.ReadAll(r)
-	if err != nil {
-		return fmt.Errorf("failed to read prompt from pipe: %w", err)
+	fail := func(err error) error {
+		return fmt.Errorf("Generate: %w", err)
 	}
 
 	var messages []llm.Message
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	for {
-		var msg llm.Message
-		if err := dec.Decode(&msg); err != nil {
-			break
-		}
-		messages = append(messages, msg)
-	}
-	if len(messages) == 0 {
-		messages = []llm.Message{{Role: "user", Content: strings.TrimSpace(string(raw))}}
+	if err := json.NewDecoder(r).Decode(&messages); err != nil {
+		return fail(err)
 	}
 
-	request := chatRequest{
+	body, err := json.Marshal(chatRequest{
 		Model:    oc.Model,
 		Messages: messages,
 		Stream:   true,
+	})
+	if err != nil {
+		return fail(err)
 	}
 
-	body, err := json.Marshal(request)
+	req, err := http.NewRequestWithContext(ctx, "POST", oc.Endpoint, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", oc.Endpoint, strings.NewReader(string(body)))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fail(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("ollama request failed: %w", err)
+		return fail(err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("ollama returned error status: %d", resp.StatusCode)
+		return fail(fmt.Errorf("ollama returned error status: %d", resp.StatusCode))
 	}
 
 	decoder := json.NewDecoder(resp.Body)
@@ -96,11 +84,11 @@ func (oc *Client) Generate(ctx context.Context, r io.Reader, w io.Writer) error 
 			if err == io.EOF {
 				break
 			}
-			return fmt.Errorf("error decoding stream: %w", err)
+			return fail(err)
 		}
 
 		if _, err := io.WriteString(w, chatResp.Message.Content); err != nil {
-			return err
+			return fail(err)
 		}
 
 		if chatResp.Done {
