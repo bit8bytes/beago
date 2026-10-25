@@ -25,43 +25,66 @@ type chatResponse struct {
 
 // Client represents an Ollama API client designed for streaming pipelines.
 type Client struct {
-	Model    string
-	Endpoint string
+	model    string
+	endpoint string
+	stream   bool
+}
+
+// Option configures a Client.
+type Option func(*Client)
+
+// WithModel sets the model to use for generation.
+func WithModel(model string) Option {
+	return func(c *Client) {
+		c.model = model
+	}
+}
+
+// WithEndpoint sets the Ollama API endpoint URL.
+func WithEndpoint(endpoint string) Option {
+	return func(c *Client) {
+		c.endpoint = endpoint
+	}
+}
+
+// WithStream enables or disables streaming mode for the client.
+func WithStream(stream bool) Option {
+	return func(c *Client) {
+		c.stream = stream
+	}
 }
 
 // New creates a new Ollama client.
-func New(model string, endpoint string) *Client {
-	if endpoint == "" {
-		endpoint = "http://localhost:11434/api/chat"
+func New(opts ...Option) *Client {
+	c := &Client{
+		endpoint: "http://localhost:11434/api/chat",
+		stream:   false, // explicitly set to false to avoid streaming by default
 	}
-	return &Client{
-		Model:    model,
-		Endpoint: endpoint,
+	for _, opt := range opts {
+		opt(c)
 	}
+	if c.model == "" {
+		panic("model must be specified")
+	}
+	return c
 }
 
 // Generate implements the llm.Generator interface.
-// It reads []llm.Message from r, sends them to Ollama, and streams the text response to w.
-func (oc *Client) Generate(ctx context.Context, r io.Reader, w io.Writer) error {
+func (oc *Client) Generate(ctx context.Context, messages []llm.Message, w io.Writer) error {
 	fail := func(err error) error {
 		return fmt.Errorf("Generate: %w", err)
 	}
 
-	var messages []llm.Message
-	if err := json.NewDecoder(r).Decode(&messages); err != nil {
-		return fail(err)
-	}
-
 	body, err := json.Marshal(chatRequest{
-		Model:    oc.Model,
+		Model:    oc.model,
 		Messages: messages,
-		Stream:   true,
+		Stream:   oc.stream,
 	})
 	if err != nil {
 		return fail(err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", oc.Endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, oc.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return fail(err)
 	}

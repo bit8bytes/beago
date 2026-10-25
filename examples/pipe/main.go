@@ -6,19 +6,19 @@ import (
 	"log"
 	"os"
 
-	llm "github.com/bit8bytes/beago/llm"
+	"github.com/bit8bytes/beago/llm"
 	"github.com/bit8bytes/beago/llm/ollama"
 	"github.com/bit8bytes/beago/pipe"
 )
 
 // Usage: echo "What is 2+2?" | go run .
 func main() {
-	model := ollama.New("gemma4:e4b", "")
+	client := ollama.New(ollama.WithModel("gemma4:e4b"))
 
 	ctx := context.Background()
 
 	err := pipe.Do(ctx, os.Stdin, os.Stdout,
-		llm.Generate(model),
+		llm.Generate(client),
 	)
 	if err != nil {
 		log.Fatal(err)

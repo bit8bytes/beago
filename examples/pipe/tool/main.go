@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/bit8bytes/beago/llm"
 	"github.com/bit8bytes/beago/llm/ollama"
@@ -34,12 +33,12 @@ type action struct {
 
 // Usage: echo "Reverse the word: hello" | go run .
 func main() {
-	model := ollama.New("gemma3:4b", "")
+	client := ollama.New(ollama.WithModel("gemma4:e4b"))
 
 	if err := pipe.Do(context.Background(), os.Stdin, os.Stdout,
-		pipe.HandlerFunc(setupSystemPromptAndUserQuestion),
+		llm.Prompt(systemPrompt),
 		pipe.Loop(
-			llm.Generate(model),
+			llm.Generate(client),
 			pipe.HandlerFunc(extractJSON),
 			pipe.HandlerFunc(executeTool),
 			pipe.HandlerFunc(exitOnFinalAnswer),
@@ -47,18 +46,6 @@ func main() {
 	); err != nil {
 		log.Fatal(err)
 	}
-}
-
-func setupSystemPromptAndUserQuestion(ctx context.Context, r io.Reader, w io.Writer) error {
-	input, err := io.ReadAll(r)
-	if err != nil {
-		return err
-	}
-	enc := json.NewEncoder(w)
-	if err := enc.Encode(llm.Message{Role: "system", Content: systemPrompt}); err != nil {
-		return err
-	}
-	return enc.Encode(llm.Message{Role: "user", Content: strings.TrimSpace(string(input))})
 }
 
 func extractJSON(ctx context.Context, r io.Reader, w io.Writer) error {
