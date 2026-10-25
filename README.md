@@ -6,11 +6,16 @@ beago brings the Unix philosophy to LLM applications: small, focused handlers co
 
 ## Core Concepts
 
-- **Pipe**: the core primitive: a `Handler` that reads `io.Reader` → transforms → writes `io.Writer`
-- **Do**: chains handlers sequentially, connecting each output to the next input via `io.Pipe`
-- **Loop**: runs a handler chain repeatedly, feeding each iteration's output as the next input; stops on `ErrDone` via context Cancelation.
+**Pipe** is the core primitive: a `Handler` that reads `io.Reader` → transforms → writes `io.Writer`. Two combinators build on it:
 
-## Quick Start
+- **Do**: chains handlers sequentially, connecting each output to the next input via `io.Pipe`
+- **Loop**: runs a handler chain repeatedly, feeding each iteration's output as the next input; stops on `ErrDone` via context cancellation
+
+**Redact** is a separate, composable layer: a `Mask` that anonymizes personal data to tokens before LLM processing and rehydrates them back after keeping sensitive values out of the model entirely. Redact is used in combination with Pipe and is safe for concurrent use.
+
+## Examples
+
+### Quick Start
 
 ```go
 package main
@@ -30,6 +35,46 @@ func main() {
 	client := ollama.New(ollama.WithModel("gemma4:e4b"))
 	pipe.Do(context.Background(), os.Stdin, os.Stdout,
 		llm.Generate(client),
+	)
+	fmt.Fprintln(os.Stdout)
+}
+```
+
+### Redact
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/bit8bytes/beago/llm"
+	"github.com/bit8bytes/beago/llm/ollama"
+	"github.com/bit8bytes/beago/pipe"
+	"github.com/bit8bytes/beago/redact"
+)
+
+// Usage: echo 'Alice sent Bob $500 last Tuesday.' | go run .
+func main() {
+	mask := redact.Mask{}
+	// Adding values to the mask allows them to be anonymized and rehydrated later.
+	// Anonymize must be called before [llm.Generate] to ensure that the LLM does
+	// not see the sensitive values.
+	mask.Add("Alice", "PERSON")
+	mask.Add("Bob", "PERSON")
+	mask.Add("$500", "AMOUNT")
+
+	client := ollama.New(ollama.WithModel("gemma4:e4b"))
+
+	pipe.Do(context.Background(), os.Stdin, os.Stdout,
+		llm.Prompt("Summarize the following in one sentence."),
+		mask.Anonymize(),
+		// The LLM doesn't see the values that have been masked by the [redact.Mask] handler,
+		// but it can still generate a summary based on the masked text.
+		llm.Generate(client),
+		mask.Rehydrate(),
 	)
 	fmt.Fprintln(os.Stdout)
 }
