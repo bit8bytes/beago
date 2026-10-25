@@ -16,14 +16,14 @@ import (
 
 // Usage: echo "Count down from 3 to 1, one number per line. When done write DONE." | go run .
 func main() {
-	model := ollama.New("gemma4:e4b", "")
+	client := ollama.New(ollama.WithModel("gemma4:e4b"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	err := pipe.Do(ctx, os.Stdin, os.Stdout,
 		pipe.Loop(
-			llm.Generate(model),
+			llm.Generate(client),
 			pipe.HandlerFunc(exitOnDone),
 		),
 	)
