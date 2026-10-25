@@ -40,9 +40,9 @@ func Do(ctx context.Context, r io.Reader, w io.Writer, handlers ...Handler) erro
 
 		pr, pw := io.Pipe() // Create a new pipe for each N-1 handler.
 
-		go func(handler Handler, in io.Reader, pw *io.PipeWriter) error {
+		go func(handler Handler, in io.Reader, pw *io.PipeWriter) {
 			err := handler.Handle(ctx, in, pw)
-			return pw.CloseWithError(err)
+			pw.CloseWithError(err)
 		}(h, r, pw)
 
 		r = pr // The next reader will read from the previous pipe's reader
