@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![Test](https://github.com/bit8bytes/beago/actions/workflows/tests.yml/badge.svg) ![Sec Scan](https://github.com/bit8bytes/beago/actions/workflows/sec_scan.yml/badge.svg)
 
-beago brings the Unix philosophy to LLM applications: small, focused handlers connected by pipes. It is also inspired by the http.Handler and http.Handler funcs (net/http). Each handler reads from an `io.Reader`, transforms the stream, and writes to an `io.Writer`.
+beago brings the [Unix philosophy](https://cscie2x.dce.harvard.edu/hw/ch01s06.html) to LLM applications: small, focused handlers connected by pipes. It is also inspired by the http.Handler and http.HandlerFunc (net/http). Each handler reads from an `io.Reader`, transforms the stream, and writes to an `io.Writer`.
 
 ## Core Concepts
 
@@ -39,6 +39,8 @@ func main() {
 	fmt.Fprintln(os.Stdout)
 }
 ```
+
+This example reads a prompt from stdin, sends it to an Ollama model, and streams the response to stdout.
 
 ### Redact
 
@@ -79,6 +81,8 @@ func main() {
 	fmt.Fprintln(os.Stdout)
 }
 ```
+
+This example masks named values (people, amounts) before the LLM sees the text, then restores the originals in the final output so sensitive data never leaves the application.
 
 More examples in [/examples](/examples).
 
