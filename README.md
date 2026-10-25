@@ -39,4 +39,4 @@ More examples in [/examples](/examples).
 
 ## Contributions
 
-Contributions of any kind are welcome! See [Get Involved](/docs/GET-INVOLVED.md) to get started.
+Contributions of any kind are welcome!
